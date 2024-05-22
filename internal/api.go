@@ -215,7 +215,7 @@ func StreamClient(req types.ChatArgs) (string, error) {
 			data := bytes.TrimPrefix(line, []byte(`data: `))
 			var chunk types.ContentBlockDelta
 			if err := json.Unmarshal(data, &chunk); err != nil {
-				return "",err
+				result = append(result, err.Error())
 			}
 			if chunk.Type == "ping"{
 				continue
@@ -230,7 +230,7 @@ func StreamClient(req types.ChatArgs) (string, error) {
 				data := bytes.TrimPrefix(line, []byte(`data: `))
 				var chunk types.ChatOverloadError
 				if err := json.Unmarshal(data, &chunk); err != nil {
-					return "",err
+					result = append(result, err.Error())
 				}
 			}
 		}
