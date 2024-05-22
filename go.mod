@@ -1,4 +1,4 @@
-module anthropicgo
+module github.com/clive-alliance/anthropicgo
 
 go 1.20
 

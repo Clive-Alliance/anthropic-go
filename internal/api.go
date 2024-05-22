@@ -3,7 +3,7 @@ package internal
 import (
 	"bufio"
 	"bytes"
-	"anthropicgo/types"
+	"github.com/clive-alliance/anthropicgo/types"
 	"encoding/json"
 	"fmt"
 	"io"

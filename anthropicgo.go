@@ -1,8 +1,8 @@
 package anthropicgo
 
 import (
-	"anthropicgo/internal"
-	"anthropicgo/types"
+	"github.com/clive-alliance/anthropicgo/internal"
+	"github.com/clive-alliance/anthropicgo/types"
 )
 
 // ChatError represents a chat-related error.
