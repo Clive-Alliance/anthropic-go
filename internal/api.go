@@ -108,7 +108,7 @@ func Client(req types.ChatArgs) (string, error) {
 	}
 
 	// Set request headers
-	request.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_key"))
+	request.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("anthropic-version", "2023-06-01")
 	request.Header.Set("anthropic-beta", "messages-2023-12-15")
@@ -171,7 +171,7 @@ func StreamClient(req types.ChatArgs) (string, error) {
 	request.Header.Set("Accept", "text/event-stream")
 	request.Header.Set("Cache-Control", "no-cache")
 	request.Header.Set("Connection", "keep-alive")
-	request.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_key"))
+	request.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
 	request.Header.Set("anthropic-version", "2023-06-01")
 	request.Header.Set("anthropic-beta", "messages-2023-12-15")
 
