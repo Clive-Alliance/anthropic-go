@@ -3,9 +3,10 @@ package internal
 import (
 	"bufio"
 	"bytes"
-	"github.com/clive-alliance/anthropicgo/types"
 	"encoding/json"
 	"fmt"
+	"github.com/clive-alliance/anthropicgo/types"
+	"github.com/joho/godotenv"
 	"io"
 	"math"
 	"math/rand"
@@ -15,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"github.com/joho/godotenv"
 )
 
 // RateLimiter is a simple rate limiter implementation
@@ -153,7 +153,7 @@ func Client(req types.ChatArgs) (string, error) {
 	return content, nil
 }
 
-func StreamClient(req types.ChatArgs) (string, error) {
+func StreamCompleteClient(req types.ChatArgs) (string, error) {
 	// Marshal the payload to JSON
 	reqJsonPayload, err := json.Marshal(req)
 	if err != nil {
@@ -206,34 +206,122 @@ func StreamClient(req types.ChatArgs) (string, error) {
 	scanner := bufio.NewScanner(resp.Body)
 	result := []string{}
 
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if bytes.HasPrefix(line,[]byte(`event: message_stop)`)){
-				break
-			}
-			if bytes.HasPrefix(line,[]byte(`data: `)){
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if bytes.HasPrefix(line, []byte(`event: message_stop)`)) {
+			break
+		}
+		if bytes.HasPrefix(line, []byte(`data: `)) {
 			data := bytes.TrimPrefix(line, []byte(`data: `))
 			var chunk types.ContentBlockDelta
 			if err := json.Unmarshal(data, &chunk); err != nil {
 				result = append(result, err.Error())
 			}
-			if chunk.Type == "ping"{
+			if chunk.Type == "ping" {
 				continue
 			}
-			if chunk.Type == "content_block_start"{
+			if chunk.Type == "content_block_start" {
 				continue
 			}
-			if chunk.Type == "content_block_delta"{
-				result = append(result,chunk.Delta["text"])
+			if chunk.Type == "content_block_delta" {
+				result = append(result, chunk.Delta["text"])
 			}
-			}else if bytes.HasPrefix(line,[]byte(`event: error)`)){
-				data := bytes.TrimPrefix(line, []byte(`data: `))
-				var chunk types.ChatOverloadError
-				if err := json.Unmarshal(data, &chunk); err != nil {
-					result = append(result, err.Error())
-				}
+		} else if bytes.HasPrefix(line, []byte(`event: error)`)) {
+			data := bytes.TrimPrefix(line, []byte(`data: `))
+			var chunk types.ChatOverloadError
+			if err := json.Unmarshal(data, &chunk); err != nil {
+				result = append(result, err.Error())
 			}
 		}
-		finalResult := strings.Join(result, "")
+	}
+	finalResult := strings.Join(result, "")
 	return finalResult, nil
+}
+
+func StreamClient(req types.ChatArgs, chunkchan chan string) error {
+	// Marshal the payload to JSON
+	reqJsonPayload, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	// Create a new HTTP request
+	request, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer([]byte(reqJsonPayload)))
+	if err != nil {
+		return err
+	}
+
+	// Set request headers
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "text/event-stream")
+	request.Header.Set("Cache-Control", "no-cache")
+	request.Header.Set("Connection", "keep-alive")
+	request.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
+	request.Header.Set("anthropic-version", "2023-06-01")
+	request.Header.Set("anthropic-beta", "messages-2023-12-15")
+
+	// Make the request
+	resp, err := retryRequest(httpClient, request)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 400 {
+		// Read the response body
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+
+		// Convert the response body to a string
+		bodyString := string(bodyBytes)
+
+		// Print the response body
+		fmt.Println(bodyString)
+	}
+	// Check if the response status indicates an error
+	if resp.StatusCode >= 400 {
+		var clientErr types.ErrorResponse
+		if err := json.NewDecoder(resp.Body).Decode(&clientErr); err != nil {
+			return err
+		}
+
+		chunkchan <- clientErr.Error.Message
+
+	}
+	// Use a scanner to read the streaming response
+	scanner := bufio.NewScanner(resp.Body)
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if bytes.HasPrefix(line, []byte(`event: message_stop)`)) {
+			break
+		}
+		if bytes.HasPrefix(line, []byte(`data: `)) {
+			data := bytes.TrimPrefix(line, []byte(`data: `))
+			var chunk types.ContentBlockDelta
+			if err := json.Unmarshal(data, &chunk); err != nil {
+				chunkchan <-  err.Error()
+			}
+			if chunk.Type == "ping" {
+				continue
+			}
+			if chunk.Type == "content_block_start" {
+				continue
+			}
+			if chunk.Type == "content_block_delta" {
+				chunkchan <- chunk.Delta["text"]
+
+			}
+		} else if bytes.HasPrefix(line, []byte(`event: error)`)) {
+			data := bytes.TrimPrefix(line, []byte(`data: `))
+			var chunk types.ChatOverloadError
+			if err := json.Unmarshal(data, &chunk); err != nil {
+				chunkchan <-  err.Error()
+			}
+		}
+	}
+	// Close the channel after sending all words
+	defer close(chunkchan)
+	return nil
 }

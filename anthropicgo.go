@@ -44,7 +44,7 @@ func ChatAnth(kwargs ...map[string]interface{}) AnthChatArgs {
 }
 
 // ChatClient sends a prompt to the chat client and returns the response.
-func (args AnthChatArgs) ChatClient(prompt string, assistant string) (string, error) {
+func (args AnthChatArgs) Chat(prompt string, assistant string) (string, error) {
 	if args.ChatArgs.Messages == nil {
 		args.ChatArgs.Messages = make([]types.Message, 0)
 	}
@@ -63,7 +63,7 @@ func (args AnthChatArgs) ChatClient(prompt string, assistant string) (string, er
 	return response, err
 }
 
-func (params AnthChatArgs) StreamClient(prompt string, system string) (string, error) {
+func (params AnthChatArgs) StreamCompleteChat(prompt string, system string) (string, error) {
 	if params.ChatArgs.Messages == nil {
 		params.ChatArgs.Messages = make([]types.Message, 0)
 	}
@@ -76,10 +76,35 @@ func (params AnthChatArgs) StreamClient(prompt string, system string) (string, e
 
 	params.Stream = true
 
-	response, err := internal.StreamClient(params.ChatArgs)
+	response, err := internal.StreamCompleteClient(params.ChatArgs)
 
 	if err != nil {
 		return "", err
 	}
 	return response, err
+}
+
+
+func (params AnthChatArgs) StreamChat(prompt string, system string) <-chan string {
+	if params.ChatArgs.Messages == nil {
+		params.ChatArgs.Messages = make([]types.Message, 0)
+	}
+
+	if system == "" {
+		params.ChatArgs.Messages = append(params.ChatArgs.Messages, types.Message{Role: "user", Content: prompt})
+	} else {
+		params.ChatArgs.Messages = append(params.ChatArgs.Messages, types.Message{Role: "user", Content: prompt}, types.Message{Role: "system", Content: system})
+	}
+
+	params.Stream = true
+    chunkchan := make(chan string)
+
+    go func() {
+        err := internal.StreamClient(params.ChatArgs, chunkchan)
+        if err != nil {
+           chunkchan <- err.Error()
+        }
+    }()
+
+    return chunkchan
 }
